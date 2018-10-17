@@ -1,13 +1,17 @@
 # redhttpd
 
-Forget "python -m SimpleHTTPServer". redhttpd implements - on top of SimpleHTTPServer ;) - a set of useful features for Red Teaming and Penetration Testing. This tool was designed to run on the "tester side" and make his/her life easier in recurring tasks such as:
+Forget "python -m SimpleHTTPServer". redhttpd implements - on top of SimpleHTTPServer ;) - a set of useful features for Red Teaming and Penetration Testing. This tool was designed to run on the "attacker side" and make his/her life easier in recurring tasks such as:
 	
 	1. getting a reverse shell in restricted environments - such as when there's only 1
 	    outbound port open on the target host - with a simple target side one-liner
+	    
 	2. exploiting Remote File Inclusion (RFI) vulnerabilities
+	
 	3. transferring favorite/most used exploits and exploits' suggesters for privilege escalation
+	
 	4. creating and transferring msf shellcode
-	5. transferring any file to the target host.
+	
+	5. transferring all kind of files to the target host.
 
 # Usage
 
