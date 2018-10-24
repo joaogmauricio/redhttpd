@@ -136,9 +136,11 @@ def main():
 			file_list.append(os.path.basename(new_filename))
 
 	elif args.exploits:
-	       	for filename in glob.glob(os.path.join(EXPLOITS_DIR + "/" + args.exploits, '*')):
-			shutil.copy(filename, args.root_directory + "/" + os.path.basename(filename))
-       	                file_list.append(os.path.basename(filename))
+		for root, dirs, files in os.walk(EXPLOITS_DIR + "/" + args.exploits):
+			for filename in files:
+				if filename != "LICENSE":
+					shutil.copy(root + "/" + filename, args.root_directory + "/" + os.path.basename(filename))
+					file_list.append(os.path.basename(filename))
 
 	elif args.msf_shell:
 		msfvenom_args = args.msf_shell.split()
