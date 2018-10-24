@@ -201,7 +201,7 @@ def main():
 				httpd.server_close()
 				if args.yolo and not args.no_listener:
 					vprint("Now on SIMPLELISTENER mode", 2)
-					listerner = SimpleListener(args.binding_address, args.port)
+					listener = SimpleListener(args.binding_address, args.port)
 					listener.start()
 
 		else:
